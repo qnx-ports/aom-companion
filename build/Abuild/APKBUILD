@@ -1,0 +1,70 @@
+# Apline-Contributor: Oleg Titov <oleg.titov@gmail.com>
+# Alpine-Maintainer: Oleg Titov <oleg.titov@gmail.com>
+# Maintainer: Aaron Bassett <abassett@qnx.com>
+pkgname=aom
+pkgver=3.13.1
+pkgrel=2
+pkgdesc="Alliance for Open Media (AOM) AV1 codec SDK"
+url="https://aomedia.org/"
+arch="all"
+license="BSD-2-Clause"
+options="!check" # tests run for 5+ hours
+depends="libc++"
+makedepends="
+    cmake
+    nasm
+    perl
+    python3
+    ninja
+    clang
+    libc++-dev
+    "
+subpackages="$pkgname-static $pkgname-dev $pkgname-doc $pkgname-libs"
+source="https://storage.googleapis.com/aom-releases/libaom-$pkgver.tar.gz
+    "
+builddir="$srcdir/libaom-$pkgver"
+
+build() {
+    local _neon_opt=
+    case "$CARCH" in
+        armhf) _neon_opt="-DENABLE_NEON=OFF" ;;
+        armv7) _neon_opt="-DAOM_NEON_INTRIN_FLAG=-mfpu=neon" ;;
+    esac
+    local _opt=
+    if [[ $CARCH == "aarch64" ]]; then
+        _opt="-DCONFIG_RUNTIME_CPU_DETECT=0"
+    fi
+
+    CC=clang \
+    CXX=clang++ \
+    cmake -B build -G Ninja \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DBUILD_SHARED_LIBS=True \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DENABLE_TESTS="$(want_check && echo ON || echo OFF)" \
+	$_opt \
+        $_neon_opt
+    cmake --build build
+}
+
+check() {
+    local _testdata="$builddir"/test_data
+    mkdir -p $_testdata
+    export LIBAOM_TEST_DATA_PATH=$_testdata
+    ninja -C build testdata
+    ninja -C build runtests
+}
+
+package() {
+    depends="aom-libs=$pkgver-r$pkgrel $depends"
+    DESTDIR="$pkgdir" cmake --install build
+
+    install -Dm 644 -t "$pkgdir"/usr/share/doc/"$pkgname"/ \
+        README.md LICENSE PATENTS
+}
+
+
+sha512sums="
+718c9cd41fe65c746a5e06b906b419fa919f65c999943101557ffd3edd1704179da69392083d877c0753327cb94b182664d34c7dedcd42696ec0c2bf55299248  libaom-3.13.1.tar.gz
+"
